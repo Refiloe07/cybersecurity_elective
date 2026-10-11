@@ -1,5 +1,8 @@
 package dev.sentry.cli;
 
+import dev.sentry.model.EventType;
+import dev.sentry.parser.LogParser;
+import dev.sentry.parser.ParseResult;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
@@ -8,8 +11,8 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Year;
 import java.util.concurrent.Callable;
-import java.util.stream.Stream;
 
 @Command(
     name = "analyze",
@@ -29,6 +32,10 @@ public class AnalyzeCommand implements Callable<Integer> {
             description = "Time window for brute-force detection (default: ${DEFAULT-VALUE}).")
     private String window;
 
+    @Option(names = {"-y", "--year"},
+            description = "Year to assume, since syslog lines have none (default: current year).")
+    private int year = Year.now().getValue();
+
     @Override
     public Integer call() {
         if (!Files.isRegularFile(logFile)) {
@@ -36,12 +43,16 @@ public class AnalyzeCommand implements Callable<Integer> {
             return 2;
         }
 
-        // Day 1 placeholder: just prove we can read the file.
-        // The real parser arrives on Day 2.
-        try (Stream<String> lines = Files.lines(logFile)) {
-            long count = lines.count();
-            System.out.printf("Read %d lines from %s%n", count, logFile);
-            System.out.printf("Settings: threshold=%d, window=%s%n", threshold, window);
+        try {
+            ParseResult result = new LogParser(year).parseFile(logFile);
+            long failed = result.events().stream()
+                    .filter(e -> e.type() == EventType.FAILED_LOGIN).count();
+            long accepted = result.events().size() - failed;
+
+            System.out.printf("Read %d lines from %s%n", result.totalLines(), logFile);
+            System.out.printf("Parsed %d SSH events (%d failed, %d accepted); skipped %d other lines%n",
+                    result.events().size(), failed, accepted, result.skippedLines());
+            System.out.printf("Settings: threshold=%d, window=%s, year=%d%n", threshold, window, year);
             return 0;
         } catch (IOException | UncheckedIOException e) {
             System.err.println("error: could not read " + logFile
