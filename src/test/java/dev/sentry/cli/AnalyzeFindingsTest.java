@@ -38,20 +38,29 @@ class AnalyzeFindingsTest {
     }
 
     @Test
-    void printsFindingsForSampleLog(@TempDir Path dir) {
+    void printsAllRulesForSampleLog(@TempDir Path dir) {
         Run r = run("analyze", sampleLog(dir).toString(), "--year", "2026");
         assertEquals(0, r.exitCode());
-        assertTrue(r.out().contains("Brute-force findings: 3"));
-        assertTrue(r.out().contains("[HIGH  ] 203.0.113.5"));
-        assertTrue(r.out().contains("[MEDIUM] 203.0.113.9"));
+        assertTrue(r.out().contains("Findings: 5"));
+        assertTrue(r.out().contains("[CRITICAL] 192.0.2.44"));
+        assertTrue(r.out().contains("success-after-failures"));
+        assertTrue(r.out().contains("[HIGH    ] 203.0.113.5"));
+        assertTrue(r.out().contains("invalid-user: 8 non-existent usernames"));
         assertTrue(r.out().contains("window=10m"));
+    }
+
+    @Test
+    void criticalFindingIsListedFirst(@TempDir Path dir) {
+        String out = run("analyze", sampleLog(dir).toString(), "--year", "2026").out();
+        assertTrue(out.indexOf("[CRITICAL]") < out.indexOf("[HIGH    ]"));
+        assertTrue(out.indexOf("[HIGH    ]") < out.indexOf("[MEDIUM  ]"));
     }
 
     @Test
     void higherThresholdFindsNothing(@TempDir Path dir) {
         Run r = run("analyze", sampleLog(dir).toString(), "--year", "2026", "-t", "20");
         assertEquals(0, r.exitCode());
-        assertTrue(r.out().contains("No brute-force activity detected."));
+        assertTrue(r.out().contains("No suspicious activity detected."));
     }
 
     @Test

@@ -1,6 +1,6 @@
 package dev.sentry.cli;
 
-import dev.sentry.detect.BruteForceDetector;
+import dev.sentry.detect.Analyzer;
 import dev.sentry.detect.Finding;
 import dev.sentry.model.EventType;
 import dev.sentry.parser.LogParser;
@@ -32,11 +32,11 @@ public class AnalyzeCommand implements Callable<Integer> {
     private Path logFile;
 
     @Option(names = {"-t", "--threshold"}, defaultValue = "5",
-            description = "Failed logins from one IP that count as brute force (default: ${DEFAULT-VALUE}).")
+            description = "Failed logins or guessed usernames from one IP that raise a finding (default: ${DEFAULT-VALUE}).")
     private int threshold;
 
     @Option(names = {"-w", "--window"}, defaultValue = "10m", converter = DurationConverter.class,
-            description = "Time window for the threshold, e.g. 30s, 10m, 2h, 1d (default: ${DEFAULT-VALUE}).")
+            description = "Time window the threshold applies to, e.g. 30s, 10m, 2h, 1d (default: ${DEFAULT-VALUE}).")
     private Duration window;
 
     @Option(names = {"-y", "--year"},
@@ -67,14 +67,14 @@ public class AnalyzeCommand implements Callable<Integer> {
                     threshold, DurationConverter.format(window), year);
             System.out.println();
 
-            List<Finding> findings = new BruteForceDetector(threshold, window).detect(result.events());
+            List<Finding> findings = Analyzer.analyze(result.events(), threshold, window);
             if (findings.isEmpty()) {
-                System.out.println("No brute-force activity detected.");
+                System.out.println("No suspicious activity detected.");
             } else {
-                System.out.printf("Brute-force findings: %d%n", findings.size());
+                System.out.printf("Findings: %d%n", findings.size());
                 for (Finding f : findings) {
-                    System.out.printf("  [%-6s] %-15s %s (%s to %s)%n",
-                            f.severity(), f.ip(), f.description(),
+                    System.out.printf("  [%-8s] %-15s %s: %s (%s to %s)%n",
+                            f.severity(), f.ip(), f.rule(), f.description(),
                             f.firstSeen().format(SHOWN_TIME), f.lastSeen().format(SHOWN_TIME));
                 }
             }
