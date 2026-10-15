@@ -8,7 +8,7 @@ import picocli.CommandLine.Command;
     mixinStandardHelpOptions = true,
     version = "sentry 0.1.0",
     description = "Analyzes auth logs and flags suspicious activity.",
-    subcommands = { AnalyzeCommand.class, GenerateCommand.class }
+    subcommands = { AnalyzeCommand.class, GenerateCommand.class, RulesCommand.class }
 )
 public class Main implements Runnable {
 

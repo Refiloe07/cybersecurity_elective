@@ -20,7 +20,7 @@ import java.util.TreeSet;
  * finding, so a single sustained attack is reported once, not once per login.
  * Severity is HIGH once the burst reaches twice the threshold, otherwise MEDIUM.
  */
-public class BruteForceDetector {
+public class BruteForceDetector implements Rule {
 
     public static final String RULE = "brute-force";
     private static final int MAX_USERS_SHOWN = 5;
@@ -39,7 +39,18 @@ public class BruteForceDetector {
         this.window = window;
     }
 
+    @Override
+    public String name() {
+        return RULE;
+    }
+
+    @Override
+    public String description() {
+        return "Many failed logins from one IP in a short time.";
+    }
+
     /** Returns findings, biggest bursts first. */
+    @Override
     public List<Finding> detect(List<LogEvent> events) {
         Map<String, List<LogEvent>> failuresByIp = new LinkedHashMap<>();
         for (LogEvent e : events) {

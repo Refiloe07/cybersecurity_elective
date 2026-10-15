@@ -22,7 +22,7 @@ import java.util.TreeSet;
  * count here (the brute-force rule covers that). Overlapping windows are merged into
  * one finding. Severity is HIGH at twice the threshold, otherwise MEDIUM.
  */
-public class InvalidUserDetector {
+public class InvalidUserDetector implements Rule {
 
     public static final String RULE = "invalid-user";
     private static final int MAX_USERS_SHOWN = 5;
@@ -41,6 +41,17 @@ public class InvalidUserDetector {
         this.window = window;
     }
 
+    @Override
+    public String name() {
+        return RULE;
+    }
+
+    @Override
+    public String description() {
+        return "One IP trying many different usernames that do not exist.";
+    }
+
+    @Override
     public List<Finding> detect(List<LogEvent> events) {
         Map<String, List<LogEvent>> attemptsByIp = new LinkedHashMap<>();
         for (LogEvent e : events) {

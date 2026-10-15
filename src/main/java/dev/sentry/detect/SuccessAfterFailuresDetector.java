@@ -24,7 +24,7 @@ import java.util.Map;
  * Each accepted login is judged on its own, so two successes after one burst give
  * two findings. A shared IP (an office behind one router, say) can cause false alarms.
  */
-public class SuccessAfterFailuresDetector {
+public class SuccessAfterFailuresDetector implements Rule {
 
     public static final String RULE = "success-after-failures";
 
@@ -42,6 +42,17 @@ public class SuccessAfterFailuresDetector {
         this.window = window;
     }
 
+    @Override
+    public String name() {
+        return RULE;
+    }
+
+    @Override
+    public String description() {
+        return "A successful login right after many failures from the same IP.";
+    }
+
+    @Override
     public List<Finding> detect(List<LogEvent> events) {
         List<LogEvent> ordered = new ArrayList<>(events);
         ordered.sort(Comparator.comparing(LogEvent::timestamp)); // stable: ties keep file order
