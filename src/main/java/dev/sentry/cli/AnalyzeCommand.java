@@ -6,6 +6,9 @@ import dev.sentry.detect.RuleEngine;
 import dev.sentry.model.EventType;
 import dev.sentry.parser.LogParser;
 import dev.sentry.parser.ParseResult;
+import dev.sentry.report.Ansi;
+import dev.sentry.report.ColorSupport;
+import dev.sentry.report.ReportRenderer;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
@@ -16,7 +19,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Year;
-import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -30,8 +32,6 @@ import java.util.stream.Collectors;
     description = "Analyze an auth log file and report suspicious activity."
 )
 public class AnalyzeCommand implements Callable<Integer> {
-
-    private static final DateTimeFormatter SHOWN_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     @Parameters(index = "0", paramLabel = "LOGFILE", description = "Path to the auth log to analyze.")
     private Path logFile;
@@ -54,6 +54,21 @@ public class AnalyzeCommand implements Callable<Integer> {
             description = "Time window the thresholds apply to, e.g. 30s, 10m, 2h, 1d (default: ${DEFAULT-VALUE}).")
     private Duration window;
 
+    @Option(names = "--color", defaultValue = "auto", paramLabel = "WHEN",
+            description = "Colorize output: auto, always or never (default: ${DEFAULT-VALUE}). "
+                    + "'auto' colors only on a real terminal that supports it, and honors NO_COLOR.")
+    private String color;
+
+    @Option(names = "--no-color", description = "Same as --color never.")
+    private boolean noColor;
+
+    @Option(names = "--top", defaultValue = "5", paramLabel = "N",
+            description = "List the N most suspicious IPs in a summary table; 0 hides it (default: ${DEFAULT-VALUE}).")
+    private int top;
+
+    @Option(names = "--no-timeline", description = "Hide the failed-logins-by-hour chart.")
+    private boolean noTimeline;
+
     @Option(names = {"-y", "--year"},
             description = "Year to assume, since syslog lines have none (default: current year).")
     private int year = Year.now().getValue();
@@ -66,6 +81,17 @@ public class AnalyzeCommand implements Callable<Integer> {
         }
         if (threshold < 1) {
             System.err.println("error: --threshold must be at least 1");
+            return 2;
+        }
+        if (top < 0) {
+            System.err.println("error: --top must be 0 or more");
+            return 2;
+        }
+        boolean useColor;
+        try {
+            useColor = ColorSupport.shouldColor(color, noColor);
+        } catch (IllegalArgumentException e) {
+            System.err.println("error: " + e.getMessage());
             return 2;
         }
 
@@ -98,16 +124,8 @@ public class AnalyzeCommand implements Callable<Integer> {
             System.out.println();
 
             List<Finding> findings = engine.run(result.events());
-            if (findings.isEmpty()) {
-                System.out.println("No suspicious activity detected.");
-            } else {
-                System.out.printf("Findings: %d%n", findings.size());
-                for (Finding f : findings) {
-                    System.out.printf("  [%-8s] %-15s %s: %s (%s to %s)%n",
-                            f.severity(), f.ip(), f.rule(), f.description(),
-                            f.firstSeen().format(SHOWN_TIME), f.lastSeen().format(SHOWN_TIME));
-                }
-            }
+            String report = ReportRenderer.render(result.events(), findings, top, !noTimeline, new Ansi(useColor));
+            System.out.print(report.replace("\n", System.lineSeparator()));
             return 0;
         } catch (IOException | UncheckedIOException e) {
             System.err.println("error: could not read " + logFile

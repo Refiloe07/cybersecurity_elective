@@ -8,6 +8,7 @@ A Java command-line tool that analyzes SSH/auth logs and flags suspicious activi
 
 WTC-98J8JRLR
 
+
 ## Goals
 
 - Parse `auth.log` entries into structured events
