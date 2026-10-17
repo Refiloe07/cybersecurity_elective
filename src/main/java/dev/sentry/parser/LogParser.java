@@ -61,10 +61,10 @@ public class LogParser {
             return Optional.of(new LogEvent(
                     time,
                     type,
-                    m.group(5),
-                    m.group(7),
+                    Sanitizer.visible(m.group(5)),
+                    Sanitizer.visible(m.group(7)),
                     m.group(6) != null,
-                    m.group(8),
+                    Sanitizer.visible(m.group(8)),
                     Integer.parseInt(m.group(9))));
         } catch (DateTimeParseException | NumberFormatException e) {
             return Optional.empty(); // e.g. Feb 29 in a non-leap year, absurd port number

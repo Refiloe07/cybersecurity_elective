@@ -6,3 +6,5 @@ target/
 # Never commit real logs
 *.log
 !samples/*.log
+# Generated reports
+reports/

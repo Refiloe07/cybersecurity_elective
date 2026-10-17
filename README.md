@@ -37,7 +37,7 @@ java -jar target/sentry.jar analyze path/to/auth.log --threshold 5 --window 10m
 - [x] Day 5: invalid-user and success-after-failure rules
 - [x] Day 6: rule engine and configurable thresholds
 - [ ] Day 7: terminal report
-- [ ] Day 8: JSON/CSV export
+- [x] Day 8: JSON/CSV export
 - [ ] Day 9: live mode and CI
 - [ ] Day 10: polish and v1.0 release
 

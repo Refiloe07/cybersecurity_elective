@@ -3,6 +3,9 @@ package dev.sentry.cli;
 import dev.sentry.detect.Finding;
 import dev.sentry.detect.RuleCatalog;
 import dev.sentry.detect.RuleEngine;
+import dev.sentry.export.AnalysisReport;
+import dev.sentry.export.CsvExporter;
+import dev.sentry.export.JsonExporter;
 import dev.sentry.model.EventType;
 import dev.sentry.parser.LogParser;
 import dev.sentry.parser.ParseResult;
@@ -15,12 +18,15 @@ import picocli.CommandLine.Parameters;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Year;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Callable;
@@ -33,8 +39,19 @@ import java.util.stream.Collectors;
 )
 public class AnalyzeCommand implements Callable<Integer> {
 
+    private static final List<String> FORMATS = List.of("text", "json", "csv");
+
     @Parameters(index = "0", paramLabel = "LOGFILE", description = "Path to the auth log to analyze.")
     private Path logFile;
+
+    @Option(names = {"-f", "--format"}, defaultValue = "text", paramLabel = "FORMAT",
+            description = "Output format: text, json or csv (default: ${DEFAULT-VALUE}). "
+                    + "json and csv print only the data, so they can be piped or saved.")
+    private String format;
+
+    @Option(names = {"-o", "--output"}, paramLabel = "FILE",
+            description = "Write the report to this file instead of the screen (never colored).")
+    private Path output;
 
     @Option(names = {"-t", "--threshold"}, defaultValue = "5",
             description = "Default threshold for every rule: how many failed logins or guessed usernames "
@@ -55,7 +72,7 @@ public class AnalyzeCommand implements Callable<Integer> {
     private Duration window;
 
     @Option(names = "--color", defaultValue = "auto", paramLabel = "WHEN",
-            description = "Colorize output: auto, always or never (default: ${DEFAULT-VALUE}). "
+            description = "Colorize text output: auto, always or never (default: ${DEFAULT-VALUE}). "
                     + "'auto' colors only on a real terminal that supports it, and honors NO_COLOR.")
     private String color;
 
@@ -63,10 +80,10 @@ public class AnalyzeCommand implements Callable<Integer> {
     private boolean noColor;
 
     @Option(names = "--top", defaultValue = "5", paramLabel = "N",
-            description = "List the N most suspicious IPs in a summary table; 0 hides it (default: ${DEFAULT-VALUE}).")
+            description = "Text format: list the N most suspicious IPs in a table; 0 hides it (default: ${DEFAULT-VALUE}).")
     private int top;
 
-    @Option(names = "--no-timeline", description = "Hide the failed-logins-by-hour chart.")
+    @Option(names = "--no-timeline", description = "Text format: hide the failed-logins-by-hour chart.")
     private boolean noTimeline;
 
     @Option(names = {"-y", "--year"},
@@ -87,9 +104,18 @@ public class AnalyzeCommand implements Callable<Integer> {
             System.err.println("error: --top must be 0 or more");
             return 2;
         }
+        String fmt = format == null ? "text" : format.trim().toLowerCase(Locale.ROOT);
+        if (!FORMATS.contains(fmt)) {
+            System.err.println("error: --format must be text, json or csv but was '" + format + "'");
+            return 2;
+        }
+        if (output != null && pointsAtInputLog()) {
+            System.err.println("error: refusing to overwrite the input log with the report: " + output);
+            return 2;
+        }
         boolean useColor;
         try {
-            useColor = ColorSupport.shouldColor(color, noColor);
+            useColor = ColorSupport.shouldColor(color, noColor) && output == null;
         } catch (IllegalArgumentException e) {
             System.err.println("error: " + e.getMessage());
             return 2;
@@ -105,32 +131,70 @@ public class AnalyzeCommand implements Callable<Integer> {
             return 2;
         }
 
+        ParseResult result;
         try {
-            ParseResult result = new LogParser(year).parseFile(logFile);
-            long failed = result.events().stream()
-                    .filter(e -> e.type() == EventType.FAILED_LOGIN).count();
-            long accepted = result.events().size() - failed;
-
-            String ruleSummary = engine.ruleNames().stream()
-                    .map(name -> name + "=" + overrides.getOrDefault(name, threshold))
-                    .collect(Collectors.joining(", "));
-
-            System.out.printf("Read %d lines from %s%n", result.totalLines(), logFile);
-            System.out.printf("Parsed %d SSH events (%d failed, %d accepted); skipped %d other lines%n",
-                    result.events().size(), failed, accepted, result.skippedLines());
-            System.out.printf("Settings: threshold=%d, window=%s, year=%d%n",
-                    threshold, DurationConverter.format(window), year);
-            System.out.printf("Rules: %s%n", ruleSummary.isEmpty() ? "(none)" : ruleSummary);
-            System.out.println();
-
-            List<Finding> findings = engine.run(result.events());
-            String report = ReportRenderer.render(result.events(), findings, top, !noTimeline, new Ansi(useColor));
-            System.out.print(report.replace("\n", System.lineSeparator()));
-            return 0;
+            result = new LogParser(year).parseFile(logFile);
         } catch (IOException | UncheckedIOException e) {
             System.err.println("error: could not read " + logFile
                     + " (is it a UTF-8 text file?): " + e.getMessage());
             return 1;
+        }
+
+        List<Finding> findings = engine.run(result.events());
+        long failed = result.events().stream().filter(e -> e.type() == EventType.FAILED_LOGIN).count();
+        long accepted = result.events().size() - failed;
+
+        Map<String, Integer> effective = new LinkedHashMap<>();
+        for (String name : engine.ruleNames()) {
+            effective.put(name, overrides.getOrDefault(name, threshold));
+        }
+
+        String body;
+        switch (fmt) {
+            case "json" -> body = JsonExporter.toJson(new AnalysisReport(
+                    logFile.toString(), result.totalLines(), result.events().size(), failed, accepted,
+                    result.skippedLines(), threshold, DurationConverter.format(window), year, effective,
+                    findings, ReportRenderer.topOffenders(result.events(), findings, Integer.MAX_VALUE)));
+            case "csv" -> body = CsvExporter.findingsToCsv(findings);
+            default -> {
+                String ruleSummary = effective.entrySet().stream()
+                        .map(e -> e.getKey() + "=" + e.getValue())
+                        .collect(Collectors.joining(", "));
+                String text = String.format("Read %d lines from %s\n", result.totalLines(), logFile)
+                        + String.format("Parsed %d SSH events (%d failed, %d accepted); skipped %d other lines\n",
+                                result.events().size(), failed, accepted, result.skippedLines())
+                        + String.format("Settings: threshold=%d, window=%s, year=%d\n",
+                                threshold, DurationConverter.format(window), year)
+                        + String.format("Rules: %s\n", ruleSummary.isEmpty() ? "(none)" : ruleSummary)
+                        + "\n"
+                        + ReportRenderer.render(result.events(), findings, top, !noTimeline, new Ansi(useColor));
+                body = text.replace("\n", System.lineSeparator());
+            }
+        }
+
+        if (output == null) {
+            System.out.print(body);
+            return 0;
+        }
+        try {
+            Path parent = output.toAbsolutePath().getParent();
+            if (parent != null) {
+                Files.createDirectories(parent);
+            }
+            Files.writeString(output, body, StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            System.err.println("error: could not write " + output + ": " + e.getMessage());
+            return 1;
+        }
+        System.out.printf("Wrote %s report (%d findings) to %s%n", fmt, findings.size(), output);
+        return 0;
+    }
+
+    private boolean pointsAtInputLog() {
+        try {
+            return Files.exists(output) && Files.isSameFile(output, logFile);
+        } catch (IOException e) {
+            return false;
         }
     }
 }
