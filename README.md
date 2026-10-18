@@ -1,5 +1,7 @@
 # sentry
 
+[![CI](https://github.com/Refiloe07/cybersecurity_elective/actions/workflows/ci.yml/badge.svg)](https://github.com/Refiloe07/cybersecurity_elective/actions/workflows/ci.yml)
+
 A Java command-line tool that analyzes SSH/auth logs and flags suspicious activity such as brute-force attempts.
 
 > Status: Day 1 of a 10-day build. Work in progress.
@@ -38,7 +40,7 @@ java -jar target/sentry.jar analyze path/to/auth.log --threshold 5 --window 10m
 - [x] Day 6: rule engine and configurable thresholds
 - [ ] Day 7: terminal report
 - [x] Day 8: JSON/CSV export
-- [ ] Day 9: live mode and CI
+- [x] Day 9: live mode and CI
 - [ ] Day 10: polish and v1.0 release
 
 ## License

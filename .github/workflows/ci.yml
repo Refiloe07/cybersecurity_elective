@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Java ${{ matrix.java }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        java: ['17', '21']
+
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v7
+
+      - name: Set up Java ${{ matrix.java }}
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+          cache: maven
+
+      - name: Build and run the tests
+        run: mvn -B -ntp verify
+
+      - name: Smoke test the packaged jar
+        shell: bash
+        run: |
+          java -jar target/sentry.jar --version
+          java -jar target/sentry.jar generate -o "$RUNNER_TEMP/auth.log" --year 2026
+          java -jar target/sentry.jar analyze "$RUNNER_TEMP/auth.log" --year 2026 --no-color
+          java -jar target/sentry.jar analyze "$RUNNER_TEMP/auth.log" --year 2026 --format json --output "$RUNNER_TEMP/report.json"
+          java -jar target/sentry.jar watch "$RUNNER_TEMP/auth.log" --from-start --for 1s --year 2026
+
+      - name: Upload the jar
+        if: matrix.os == 'ubuntu-latest' && matrix.java == '17'
+        uses: actions/upload-artifact@v7
+        with:
+          name: sentry-jar
+          path: target/sentry.jar
+          if-no-files-found: error
