@@ -64,7 +64,7 @@ class JsonExporterTest {
     void containsToolMetadataAndSettings() {
         String json = JsonExporter.toJson(reportFor(findings));
         assertTrue(json.contains("\"tool\": \"sentry\""));
-        assertTrue(json.contains("\"version\": \"0.1.0\""));
+        assertTrue(json.contains("\"version\": \"" + dev.sentry.Version.CURRENT + "\""));
         assertTrue(json.contains("\"file\": \"auth.log\""));
         assertTrue(json.contains("\"threshold\": 5,"));
         assertTrue(json.contains("\"window\": \"10m\""));

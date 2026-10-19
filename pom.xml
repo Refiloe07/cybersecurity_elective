@@ -6,7 +6,7 @@
 
   <groupId>dev.sentry</groupId>
   <artifactId>sentry</artifactId>
-  <version>0.1.0-SNAPSHOT</version>
+  <version>1.0.0</version>
   <packaging>jar</packaging>
   <name>sentry</name>
   <description>CLI auth-log analyzer that detects brute-force and suspicious logins</description>

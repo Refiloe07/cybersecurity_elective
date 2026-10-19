@@ -35,7 +35,17 @@ import java.util.stream.Collectors;
 @Command(
     name = "analyze",
     mixinStandardHelpOptions = true,
-    description = "Analyze an auth log file and report suspicious activity."
+    description = "Analyze an auth log file and report suspicious activity.",
+    usageHelpAutoWidth = true,
+    footerHeading = "%nExamples:%n",
+    footer = {
+        "  sentry analyze auth.log                       readable report",
+        "  sentry analyze auth.log -t 10 -w 1h           10 failures within an hour",
+        "  sentry analyze auth.log -T brute-force=20     change one rule only",
+        "  sentry analyze auth.log -s invalid-user       leave one rule out",
+        "  sentry analyze auth.log -f json -o out.json   save for other tools",
+        "  sentry analyze auth.log -f csv -o out.csv     open in a spreadsheet"
+    }
 )
 public class AnalyzeCommand implements Callable<Integer> {
 
@@ -92,8 +102,9 @@ public class AnalyzeCommand implements Callable<Integer> {
 
     @Override
     public Integer call() {
-        if (!Files.isRegularFile(logFile)) {
-            System.err.println("error: file not found: " + logFile);
+        String fileProblem = LogFileCheck.problem(logFile);
+        if (fileProblem != null) {
+            System.err.println("error: " + fileProblem);
             return 2;
         }
         if (threshold < 1) {

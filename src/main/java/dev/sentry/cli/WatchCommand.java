@@ -26,7 +26,15 @@ import java.util.concurrent.Callable;
 @Command(
     name = "watch",
     mixinStandardHelpOptions = true,
-    description = "Follow a log file and print an alert the moment a rule fires (like tail -f)."
+    description = "Follow a log file and print an alert the moment a rule fires (like tail -f).",
+    usageHelpAutoWidth = true,
+    footerHeading = "%nExamples:%n",
+    footer = {
+        "  sentry watch /var/log/auth.log            alert until you press Ctrl+C",
+        "  sentry watch auth.log --from-start        also analyze the existing lines",
+        "  sentry watch auth.log -t 3 --for 10m      sensitive; stop after 10 minutes",
+        "  sentry watch auth.log --no-color | tee alerts.txt   keep a copy"
+    }
 )
 public class WatchCommand implements Callable<Integer> {
 
@@ -74,8 +82,9 @@ public class WatchCommand implements Callable<Integer> {
 
     @Override
     public Integer call() {
-        if (!Files.isRegularFile(logFile)) {
-            System.err.println("error: file not found: " + logFile);
+        String fileProblem = LogFileCheck.problem(logFile);
+        if (fileProblem != null) {
+            System.err.println("error: " + fileProblem);
             return 2;
         }
         if (threshold < 1) {

@@ -1,0 +1,47 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v7
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: Build and run the tests
+        run: mvn -B -ntp verify
+
+      - name: Check that the tag matches the program version
+        run: |
+          built="$(java -jar target/sentry.jar --version)"
+          echo "The jar says: $built"
+          echo "The tag is:   $GITHUB_REF_NAME"
+          test "$built" = "sentry ${GITHUB_REF_NAME#v}"
+
+      - name: Write a checksum for the jar
+        run: cd target && sha256sum sentry.jar > sentry.jar.sha256
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" target/sentry.jar target/sentry.jar.sha256 \
+            --verify-tag \
+            --title "sentry ${GITHUB_REF_NAME#v}" \
+            --generate-notes

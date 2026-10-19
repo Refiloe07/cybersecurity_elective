@@ -1,5 +1,6 @@
 package dev.sentry.export;
 
+import dev.sentry.Version;
 import dev.sentry.detect.Finding;
 import dev.sentry.detect.Severity;
 import dev.sentry.report.ReportRenderer.OffenderRow;
@@ -17,7 +18,7 @@ import java.util.Map;
  */
 public final class JsonExporter {
 
-    public static final String VERSION = "0.1.0";
+    public static final String VERSION = Version.CURRENT;
 
     private static final DateTimeFormatter ISO = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
 
